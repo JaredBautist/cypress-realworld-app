@@ -1,0 +1,65 @@
+name: CI Pipeline
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Descargar el código
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. Configurar Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # 3. Instalar dependencias
+      # usamos --legacy-peer-deps para evitar conflictos como el que tuviste en local
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      # 4. Ejecutar tests unitarios
+      - name: Run unit tests
+        run: npm run test:unit
+
+      # 5. Levantar la app (backend + frontend)
+      # se deja corriendo en background
+      - name: Start application
+        run: |
+          npm run dev &
+          sleep 25
+
+      # 6. Ejecutar tests E2E con Cypress
+      # usamos la acción oficial de Cypress
+      - name: Run Cypress tests
+        uses: cypress-io/github-action@v6
+        with:
+          start: npm run dev
+          wait-on: 'http://localhost:3000'
+          browser: chrome
+
+      # 7. Subir screenshots si Cypress falla
+      - name: Upload Cypress screenshots
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cypress-screenshots
+          path: cypress/screenshots
+
+      # 8. Análisis de SonarCloud
+      # recuerda crear el secreto SONAR_TOKEN en Settings -> Secrets -> Actions
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # lo da GitHub automáticamente
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}    # lo creaste tú en GitHub Secrets
+        with:
+          args: >
+            -Dsonar.projectKey=jaredbautist
+            -Dsonar.organization=Jared Bautista
